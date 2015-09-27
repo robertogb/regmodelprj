@@ -117,6 +117,10 @@ beta1 <- coef[4,1] + c(-1,1) * qt(.975, df = fitfinal$df) * coef[4,2]
 
 For intercept, the confidence interval is [`r round(beta0[1], 2)`, `r round(beta0[2], 2)`], which contains 0. For am1, the confidence interval is [`r round(beta1[1], 2)`, `r round(beta1[2], 2)`], which does not contain 0, so we can conclude that, when the other predictors do not change, the manual transmission increases the miles per gallon around `r round(coef(fitfinal)[4], 3)` (95% confidence).
 
+-----
+
+This document has been generated using knitr. The original Rmd document can be found at [GitHub](https://github.com/robertogb/regmodelprj/blob/master/MPG%20Analysis.Rmd)
+
 
 # Appendix (supporting figures)
 
@@ -318,5 +322,6 @@ ggpairs(mtcars,
 # summary(lm(mpg ~ (cyl + wt + qsec)*am + vs, mtcars))
 
 ```
+
 
 
