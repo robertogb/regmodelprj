@@ -1,2 +1,2 @@
 # regmodelprj
-Assigment for the Regression Model course
+Assignment for the Regression Model course

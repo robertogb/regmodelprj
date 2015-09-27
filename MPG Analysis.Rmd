@@ -1,0 +1,322 @@
+---
+title: "MPG Analysis"
+author: "Roberto Garrote Bernal"
+date: "September 2015"
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+  html_document: default
+---
+
+```{r LoadTransformData, echo = FALSE}
+data(mtcars)
+mtcars$am <- factor(mtcars$am)
+# mtcars$vs <- factor(mtcars$vs)
+# mtcars$gear <- factor(mtcars$gear)
+# mtcars$cyl <- factor(mtcars$cyl)
+# mtcars$carb <- factor(mtcars$carb)
+
+options(tikzDefaultEngine = "xetex")
+```
+
+# Executive summary
+
+The objective of this report is to analyze, for a collection of cars, the relationship between a set of variables (in particular the kind of transmission, am)  and miles per gallon (mpg). The main interest is to know if an automatic or manual transmission is better for mpg, and quantify the difference in terms of mpg between automatic and manual transmissions.
+
+The conclusion is that there is a relationship between the kind of transmission and mpg. However, a linear relationship of mpg with respect to am alone cannot be established, and additional variables like weight and 1/4 mile time are needed to better model mpg.
+
+# Exploratory data analysis
+
+We can observe that the average MPG for cars with manual transmission (`r round(mean(mtcars[mtcars$am == 1, "mpg"]), 2)`) is much higher than the average MPG for cars with automatic transmission (`r round(mean(mtcars[mtcars$am == 0, "mpg"]), 2)`). We must test if the difference of the means is statistically significant ($H_0: \mu_0 - \mu_1 = 0$). 
+
+```{r TestMeans, echo = FALSE}
+testMeans <- t.test(mtcars[mtcars$am == 0, "mpg"], mtcars[mtcars$am == 1, "mpg"])
+```
+
+Using the method `r testMeans$method` we obtain a p-value `r testMeans$p.value`, so the alternative hypothesis is true (means are different with a confidence over 95%) and we can expect a relationship and search for it.
+
+Let's center the continuous variables, including mpg, to obtain more meaningful value for the intercept in the regression models.
+
+```{r Center, echo = FALSE}
+mpgMean <- mean( mtcars$mpg)
+wtMean <- mean( mtcars$wt)
+qsecMean <- mean( mtcars$qsec)
+mtcars$mpg <- mtcars$mpg - mpgMean
+mtcars$disp <- mtcars$disp - mean( mtcars$disp)
+mtcars$hp <- mtcars$hp - mean( mtcars$hp)
+mtcars$drat <- mtcars$drat - mean( mtcars$drat)
+mtcars$wt <- mtcars$wt - wtMean
+mtcars$qsec <- mtcars$qsec - qsecMean
+```
+
+```{r "Model mpg ~ am", echo = FALSE}
+fitam <- lm(mpg ~ am, mtcars)
+summaryAm <- summary(fitam)
+pvalue <- summaryAm$coefficients[,4]
+```
+
+A linear regression model between mpg and am is apparently strong as the estimated parameters for intercept and slope are very significant (p-values are `r round(pvalue[1],5)` and $`r round(pvalue[2],5)`$, respectively, much lower than 0.05). However, this will be true for any factor with just two levels.
+
+The percentage of total variability of MPG explained by the linear relationship with the predictor $R^2 =$ `r round(summaryAm$r.squared, 3)` is low and the residuals plot (see figure 1) confirms that the model fit is not adequate.
+
+So we need to look for other predictors of mpg. To figure out which ones, let's start by looking at the first row (mpg) in figure 4. We can observe that associated with increasing mpg are:
+
+* Less cyclinders (cyl)
+* Less displacement (disp)
+* Less horsepower (hp)
+* Less weight (wt)
+* Less carburetors (carb)
+* More rear axle ratio (drat)
+* More 1/4 mile time (qsec)
+* S (vs)
+
+Number of forward gears (gear) may influence mpg in opposite directions depending if transmission (am) is automatic or manual.
+
+There may be relationships between am and other variables, as you can observe in the column am in figure 4, and between other pairs of variables.
+
+# Model selection
+
+In order to define the linear model that better explain the mpg values of the population, I have try two possibilities:
+
+1. To start with just one predictor (for example, those numeric variables with higher correlation with mpg), and then introduce additional predictors one by one. If the coefficients are statistically significant, the standard error reduces and the adjusted $R^2$ increases, then keep that variable in the model.
+
+2. To start with all the variables as predictors (excluding mpg, of course), and then eliminate one variable in each step, that one whose coefficient is the lowest statistically significant.
+
+With the first one, the search space is higher, while with the second one, the process is deterministic.
+
+Using the second approach, I have try the following models:
+
+```{r EliminateModels, echo = TRUE, results = 'hide'}
+##  Start with all -> eliminate not fitted, one by one (higher p)
+summary(lm(mpg ~ cyl + disp + hp + drat + wt + qsec + vs + am + gear+ carb, mtcars))
+summary(lm(mpg ~       disp + hp + drat + wt + qsec + vs + am + gear+ carb, mtcars))
+summary(lm(mpg ~       disp + hp + drat + wt + qsec +      am + gear+ carb, mtcars))
+summary(lm(mpg ~       disp + hp + drat + wt + qsec +      am + gear      , mtcars))
+summary(lm(mpg ~       disp + hp + drat + wt + qsec +      am             , mtcars))
+summary(lm(mpg ~       disp + hp        + wt + qsec +      am             , mtcars))
+summary(lm(mpg ~              hp        + wt + qsec +      am             , mtcars))
+summary(lm(mpg ~                          wt + qsec +      am             , mtcars))
+```
+
+```{r "Model mpg ~ wt + qsec + am", echo = FALSE}
+fitfinal <- lm(mpg ~ wt + qsec + am, mtcars)
+```
+
+In the final model, am is a predictor. The intercept coefficient (`r round(coef(fitfinal)[1], 3)`) is the difference with the mpg mean (`r round(mpgMean, 3)`), for automatic transmission when the values for the rest of the predictors are its respective means. The am1 coefficient (`r round(coef(fitfinal)[4], 3)`) is the increase of mpg for an hypothetical car with manual transmission when the rest of the predictors are the same. 
+
+The residuals for this model are shown in figure 2, which are much lower than with the model $mpg = \beta_0 + \beta_1 am$ (figure 1).
+
+The residuals have mean 0 and are aproximately normally distributed according to the QQ plot in figure 3, so we can calculate confidence intervals for intercept and am1 coefficients.
+
+```{r ConfidenceIntervals, echo = FALSE}
+coef <- summary(fitfinal)$coefficients
+beta0 <- coef[1,1] + c(-1,1) * qt(.975, df = fitfinal$df) * coef[1,2]
+beta1 <- coef[4,1] + c(-1,1) * qt(.975, df = fitfinal$df) * coef[4,2]
+```
+
+For intercept, the confidence interval is [`r round(beta0[1], 2)`, `r round(beta0[2], 2)`], which contains 0. For am1, the confidence interval is [`r round(beta1[1], 2)`, `r round(beta1[2], 2)`], which does not contain 0, so we can conclude that, when the other predictors do not change, the manual transmission increases the miles per gallon around `r round(coef(fitfinal)[4], 3)` (95% confidence).
+
+
+# Appendix (supporting figures)
+
+
+```{r ResidualsAM, echo = FALSE, fig.cap = "Residuals of linear model $mpg = \\beta_0 + \\beta_1 am$ ", fig.width = 4, fig.height = 3, out.width = "9cm", out.height = "6cm"}
+
+library(ggplot2)
+
+# Prepare the data
+res <- resid(fitam)
+resdf1 <- data.frame(car = 1:length(res), residual = res, am = mtcars$am)
+
+# Draw the residuals
+ggplot(resdf1, aes(x = car, y = residual, fill = am)) +
+    geom_hline(aes(yintercept = 0)) +
+    geom_bar(stat = "identity", position = "identity") + 
+    ylim(c(-10,10)) +
+    ylab("Residuals (MPG)")
+
+```
+
+```{r ResidualsFinal, echo = FALSE, fig.cap = "Residuals of linear model $mpg = \\beta_0 + \\beta_1 wt + \\beta_2 qsec + \\beta_3 am1$ ", fig.width = 4, fig.height = 3, out.width = "9cm", out.height = "6cm"}
+
+# Prepare the data
+res <- resid(fitfinal)
+resdf2 <- data.frame(car = 1:length(res), residual = res, am = mtcars$am)
+
+# Draw the residuals
+ggplot(resdf2, aes(x = car, y = residual, fill = am)) +
+    geom_hline(aes(yintercept = 0)) +
+    geom_bar(stat = "identity", position = "identity") + 
+    ylim(c(-10,10)) +
+    ylab("Residuals (MPG)")
+
+```
+
+
+```{r QQFinal, echo = FALSE, fig.cap = "QQ plot of residuals of linear model $mpg = \\beta_0 + \\beta_1 wt + \\beta_2 qsec + \\beta_3 am1$ ", fig.width = 6, fig.height = 4, out.width = "9cm", out.height = "6cm"}
+
+ggQQ <- function(LM) # argument: a linear model
+{
+    y <- quantile(LM$resid[!is.na(LM$resid)], c(0.25, 0.75))
+    x <- qnorm(c(0.25, 0.75))
+    slope <- diff(y)/diff(x)
+    int <- y[1L] - slope * x[1L]
+    p <- ggplot(LM, aes(sample=.resid)) +
+        stat_qq(alpha = 0.5) +
+        geom_abline(slope = slope, intercept = int, color="blue")
+
+    return(p)
+}
+
+ggQQ(fitfinal)
+
+```
+
+```{r ExploratoryAnalysis, fig.cap = "Exploratory data analysis tool", echo = FALSE, fig.width = 20, fig.height = 20, warning = FALSE, message = FALSE}
+
+require(GGally)
+
+suppressMessages(
+suppressWarnings(
+ggpairs(mtcars, 
+        upper = list(continuous = "smooth"),
+        lower = list(continuous = "cor"),
+        params = c(method = "lm"), 
+        colour = 'am')
+        ))
+
+# predictors <- c("cyl", "disp", "hp", "drat", "wt", "qsec", "vs", "gear", "carb")
+# 
+# ggplot(mtcars, aes(x = cyl, y = mpg, color = am, group = 1)) +
+#     geom_point() +
+#     geom_smooth(method = "lm", color = "black") +
+#     geom_smooth(data = mtcars[mtcars$am == 0,], method = "lm", size = 2) +
+#     geom_smooth(data = mtcars[mtcars$am == 1,], method = "lm", size = 2) 
+# 
+# ggplot(mtcars, aes(x = disp, y = mpg, color = am, group = 1)) +
+#     geom_point() +
+#     geom_smooth(method = "lm", color = "black") +
+#     geom_smooth(data = mtcars[mtcars$am == 0,], method = "lm", size = 2) +
+#     geom_smooth(data = mtcars[mtcars$am == 1,], method = "lm", size = 2) 
+# 
+# ggplot(mtcars, aes(x = hp, y = mpg, color = am, group = 1)) +
+#     geom_point() +
+#     geom_smooth(method = "lm", color = "black") +
+#     geom_smooth(data = mtcars[mtcars$am == 0,], method = "lm", size = 2) +
+#     geom_smooth(data = mtcars[mtcars$am == 1,], method = "lm", size = 2) 
+# 
+# ggplot(mtcars, aes(x = drat, y = mpg, color = am, group = 1)) +
+#     geom_point() +
+#     geom_smooth(method = "lm", color = "black") +
+#     geom_smooth(data = mtcars[mtcars$am == 0,], method = "lm", size = 2) +
+#     geom_smooth(data = mtcars[mtcars$am == 1,], method = "lm", size = 2) 
+# 
+# ggplot(mtcars, aes(x = wt, y = mpg, color = am, group = 1)) +
+#     geom_point() +
+#     geom_smooth(method = "lm", color = "black") +
+#     geom_smooth(data = mtcars[mtcars$am == 0,], method = "lm", size = 2) +
+#     geom_smooth(data = mtcars[mtcars$am == 1,], method = "lm", size = 2) 
+# 
+# ggplot(mtcars, aes(x = qsec, y = mpg, color = am, group = 1)) +
+#     geom_point() +
+#     geom_smooth(method = "lm", color = "black") +
+#     geom_smooth(data = mtcars[mtcars$am == 0,], method = "lm", size = 2) +
+#     geom_smooth(data = mtcars[mtcars$am == 1,], method = "lm", size = 2) 
+# 
+# ggplot(mtcars, aes(x = vs, y = mpg, color = am, group = 1)) +
+#     geom_point() +
+#     geom_smooth(method = "lm", color = "black") +
+#     geom_smooth(data = mtcars[mtcars$am == 0,], method = "lm", size = 2) +
+#     geom_smooth(data = mtcars[mtcars$am == 1,], method = "lm", size = 2) 
+# 
+# ggplot(mtcars, aes(x = gear, y = mpg, color = am, group = 1)) +
+#     geom_point() +
+#     geom_smooth(method = "lm", color = "black") +
+#     geom_smooth(data = mtcars[mtcars$am == 0,], method = "lm", size = 2) +
+#     geom_smooth(data = mtcars[mtcars$am == 1,], method = "lm", size = 2) 
+# 
+# ggplot(mtcars, aes(x = carb, y = mpg, color = am, group = 1)) +
+#     geom_point() +
+#     geom_smooth(method = "lm", color = "black") +
+#     geom_smooth(data = mtcars[mtcars$am == 0,], method = "lm", size = 2) +
+#     geom_smooth(data = mtcars[mtcars$am == 1,], method = "lm", size = 2) 
+# 
+
+```
+
+
+```{r , echo = FALSE}
+# 
+# require(dplyr)
+# mtcars %>% select(mpg, am) %>% group_by(am) %>%  summarize(mean(mpg), sd(mpg))
+# 
+# cor(mtcars$mpg, mtcars$am)
+# 
+# round(cor(mtcars),2)
+# 
+# summary2 <- function(model) {s <- summary(model); list(coef=s$coefficients, se=s$sigma, r2=s$adj.r.squared)}
+# 
+# summary(lm(mpg ~ wt, mtcars))
+# summary(lm(mpg ~ wt + am, mtcars))# slightly worst, am not significant
+# summary(lm(mpg ~ wt*am, mtcars)) # better
+# summary(lm(mpg ~ wt + cyl, mtcars)) # slightly better, but very similar   ****************
+# summary(lm(mpg ~ (wt + cyl)*am, mtcars)) # much better
+# summary(lm(mpg ~ wt + cyl + wt*am , mtcars)) # the best
+# summary(lm(mpg ~ wt + cyl + wt*am +hp , mtcars)) # worst
+# summary(lm(mpg ~ wt + cyl + disp, mtcars)) # worst
+# summary(lm(mpg ~ wt + cyl + hp, mtcars)) # worst
+# summary(lm(mpg ~ wt  + hp, mtcars)) # worst
+# summary(lm(mpg ~ wt + cyl + drat, mtcars)) # worst
+# summary(lm(mpg ~ wt + cyl + vs, mtcars)) # worst
+# summary(lm(mpg ~ wt + cyl + am, mtcars)) # worst
+# summary(lm(mpg ~ wt + cyl + carb, mtcars)) # worst
+# summary(lm(mpg ~ wt + cyl + gear, mtcars)) # worst
+# summary(lm(mpg ~ wt + cyl + qsec, mtcars)) # worst
+# 
+# fitwt <- lm(mpg ~ wt + cyl, mtcars)
+# 
+# summary(lm(mpg ~ disp, mtcars))
+# summary(lm(mpg ~ disp + wt, mtcars))
+# summary(lm(mpg ~ disp + wt+qsec, mtcars))
+# summary(lm(mpg ~ disp + wt+carb+am, mtcars))
+# summary(lm(mpg ~ disp + carb+am, mtcars))
+# 
+# fitdisp <- lm(mpg ~ disp + carb+am, mtcars)
+# 
+# summary(lm(mpg ~ cyl, mtcars)) # worst
+# summary(lm(mpg ~ cyl  + disp, mtcars)) # worst
+# summary(lm(mpg ~ cyl  + disp+hp+am, mtcars)) # worst
+# summary(lm(mpg ~ cyl  + hp, mtcars)) # worst
+# 
+# summary(lm(mpg ~ (wt + hp)*am, mtcars))
+# summary(lm(mpg ~ wt*am + hp , mtcars)) # very good
+# summary(lm(mpg ~ wt*am + hp + cyl, mtcars)) # hp not significant
+# summary(lm(mpg ~ wt*am + cyl, mtcars)) # very good
+# summary(lm(mpg ~ wt*am + cyl, mtcars)) 
+# summary(lm(mpg ~ (wt + cyl + hp)*am, mtcars)) # worst
+# 
+# summary(lm(mpg ~ hp, mtcars)) # another start
+# summary(lm(mpg ~ hp + wt, mtcars)) # better
+# summary(lm(mpg ~ hp + wt + am, mtcars)) # better
+# summary(lm(mpg ~ hp + am, mtcars)) # better
+# summary(lm(mpg ~ hp + am + wt, mtcars)) # better, am not significant
+# summary(lm(mpg ~ hp + wt, mtcars)) # slightly worst
+# summary(lm(mpg ~ hp + wt*am, mtcars))
+# summary(lm(mpg ~ hp +qsec, mtcars)) # 
+
+
+# summary(lm(mpg ~ (cyl + disp + drat + wt + qsec + gear)*am + hp + vs + carb, mtcars))
+# summary(lm(mpg ~ (cyl + drat + wt + qsec + gear)*am + hp + vs + carb, mtcars))
+# summary(lm(mpg ~ (cyl + wt + qsec + gear)*am + hp + vs + carb, mtcars))
+# summary(lm(mpg ~ (cyl + wt + qsec + gear)*am + hp + vs, mtcars))
+# summary(lm(mpg ~ (cyl + wt + qsec + gear)*am + hp + vs -qsec, mtcars))
+# summary(lm(mpg ~ (cyl + wt + gear)*am + hp + vs + qsec, mtcars))
+# summary(lm(mpg ~ (cyl + wt + gear)*am + hp + vs , mtcars))
+# summary(lm(mpg ~ (cyl + wt + qsec)*am + hp + vs, mtcars))
+# summary(lm(mpg ~ (cyl + wt + qsec + gear)*am + vs, mtcars))
+# summary(lm(mpg ~ (cyl + wt + qsec)*am + vs, mtcars))
+
+```
+
+
